@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  cluster-monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cluster-monitor-dev
+    ports:
+      - "8080:8080"
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./main.py:/app/main.py
+      - ./templates:/app/templates
+    restart: unless-stopped

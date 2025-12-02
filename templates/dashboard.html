@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kubernetes Cluster Monitor</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(135deg, #0B1622 0%, #1a2332 100%);
+            color: #e8eaf0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: linear-gradient(135deg, #1e3a5f 0%, #2a4d7c 100%);
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .header h1 {
+            font-size: 2em;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .header h1 i {
+            color: #4F9DFF;
+        }
+
+        .refresh-btn {
+            background: #4F9DFF;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: all 0.3s;
+        }
+
+        .refresh-btn:hover {
+            background: #3a7fd5;
+            transform: translateY(-2px);
+        }
+
+        .stats-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #1a2a3a 0%, #243447 100%);
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            border-left: 4px solid #4F9DFF;
+        }
+
+        .stat-card i {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            color: #4F9DFF;
+        }
+
+        .stat-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #ffffff;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            color: #a0a0a0;
+            margin-top: 5px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: linear-gradient(135deg, #1a2a3a 0%, #243447 100%);
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            border-top: 3px solid #4F9DFF;
+        }
+
+        .card h2 {
+            margin-bottom: 20px;
+            color: #ffffff;
+            font-size: 1.4em;
+        }
+
+        table {
+            width: 100%;
+            background: #0f1e2e;
+            color: #e8eaf0;
+            border-collapse: collapse;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        table thead {
+            background: #1a3a5a;
+        }
+
+        table th {
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            color: #ffffff;
+        }
+
+        table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #2a3f5f;
+        }
+
+        table tbody tr:hover {
+            background: #1a2a3a;
+        }
+
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: 600;
+            display: inline-block;
+        }
+
+        .status-running { background: #3CB371; color: white; }
+        .status-pending { background: #FFD93D; color: #333; }
+        .status-failed { background: #FF6363; color: white; }
+
+        canvas {
+            max-height: 250px;
+        }
+
+        .wide-card {
+            grid-column: span 2;
+        }
+
+        @media (max-width: 1200px) {
+            .wide-card {
+                grid-column: span 1;
+            }
+        }
+
+        .scrollable {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+
+<body>
+
+<!-- HEADER -->
+<div class="header">
+    <div>
+        <h1>
+            <i class="fas fa-server"></i>
+            Kubernetes Cluster Monitor
+        </h1>
+    </div>
+    <button class="refresh-btn" onclick="location.reload()">
+        <i class="fas fa-sync-alt"></i> Refresh
+    </button>
+</div>
+
+<!-- STATS BAR -->
+<div class="stats-bar">
+    <div class="stat-card">
+        <i class="fas fa-cube"></i>
+        <div class="stat-value">{{ total_pods }}</div>
+        <div class="stat-label">Total Pods</div>
+    </div>
+    <div class="stat-card">
+        <i class="fas fa-network-wired"></i>
+        <div class="stat-value">{{ total_services }}</div>
+        <div class="stat-label">Services</div>
+    </div>
+    <div class="stat-card">
+        <i class="fas fa-server"></i>
+        <div class="stat-value">{{ total_nodes }}</div>
+        <div class="stat-label">Nodes</div>
+    </div>
+    <div class="stat-card">
+        <i class="fas fa-heartbeat"></i>
+        <div class="stat-value">{{ health_score }}%</div>
+        <div class="stat-label">Health Score</div>
+    </div>
+</div>
+
+<!-- CHARTS GRID -->
+<div class="grid">
+    <div class="card">
+        <h2>Pod Status</h2>
+        <canvas id="podPie"></canvas>
+    </div>
+
+    <div class="card">
+        <h2>Service Types</h2>
+        <canvas id="svcPie"></canvas>
+    </div>
+
+    <div class="card">
+        <h2>Node Health</h2>
+        <canvas id="nodePie"></canvas>
+    </div>
+
+    <div class="card">
+        <h2>Top Restarting Pods</h2>
+        <canvas id="restartChart"></canvas>
+    </div>
+</div>
+
+<!-- PODS TABLE -->
+<div class="card wide-card">
+    <h2>All Pods ({{ pods|length }})</h2>
+    <div class="scrollable">
+        <table>
+            <thead>
+                <tr>
+                    <th>Pod Name</th>
+                    <th>Namespace</th>
+                    <th>Status</th>
+                    <th>Node</th>
+                    <th>Restarts</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pod in pods %}
+                <tr>
+                    <td>{{ pod.name }}</td>
+                    <td>{{ pod.namespace }}</td>
+                    <td>
+                        <span class="status-badge status-{{ pod.status|lower }}">
+                            {{ pod.status }}
+                        </span>
+                    </td>
+                    <td>{{ pod.node }}</td>
+                    <td>{{ pod.restarts }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- SERVICES TABLE -->
+<div class="card wide-card">
+    <h2>Services ({{ services|length }})</h2>
+    <div class="scrollable">
+        <table>
+            <thead>
+                <tr>
+                    <th>Service Name</th>
+                    <th>Namespace</th>
+                    <th>Type</th>
+                    <th>Cluster IP</th>
+                    <th>Ports</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for svc in services %}
+                <tr>
+                    <td>{{ svc.name }}</td>
+                    <td>{{ svc.namespace }}</td>
+                    <td>{{ svc.type }}</td>
+                    <td>{{ svc.cluster_ip }}</td>
+                    <td>{{ svc.ports }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+// Pod Status Chart
+new Chart(document.getElementById("podPie"), {
+    type: "doughnut",
+    data: {
+        labels: ["Running", "Pending", "Failed"],
+        datasets: [{
+            data: [
+                {{ pod_status.Running }},
+                {{ pod_status.Pending }},
+                {{ pod_status.Failed|default(0) }}
+            ],
+            backgroundColor: ["#3CB371", "#FFD93D", "#FF6363"]
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: { position: 'bottom', labels: { color: '#e8eaf0' } }
+        }
+    }
+});
+
+// Service Type Chart
+new Chart(document.getElementById("svcPie"), {
+    type: "doughnut",
+    data: {
+        labels: Object.keys({{ svc_counts|tojson }}),
+        datasets: [{
+            data: Object.values({{ svc_counts|tojson }}),
+            backgroundColor: ["#4F9DFF", "#38A3FF", "#1B76E0", "#0d5bb8"]
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: { position: 'bottom', labels: { color: '#e8eaf0' } }
+        }
+    }
+});
+
+// Node Health Chart
+new Chart(document.getElementById("nodePie"), {
+    type: "doughnut",
+    data: {
+        labels: ["Ready", "Not Ready"],
+        datasets: [{
+            data: [{{ node_readiness.ready }}, {{ node_readiness.not_ready }}],
+            backgroundColor: ["#3CB371", "#FF6363"]
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: { position: 'bottom', labels: { color: '#e8eaf0' } }
+        }
+    }
+});
+
+// Top Restarting Pods
+new Chart(document.getElementById("restartChart"), {
+    type: "bar",
+    data: {
+        labels: [
+            {% for item in top_restarting %}
+                "{{ item.name[:30] }}",
+            {% endfor %}
+        ],
+        datasets: [{
+            label: "Restarts",
+            data: [
+                {% for item in top_restarting %}
+                    {{ item.restarts }},
+                {% endfor %}
+            ],
+            backgroundColor: "#FF6363"
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: { labels: { color: '#e8eaf0' } }
+        },
+        scales: {
+            y: { ticks: { color: '#e8eaf0' } },
+            x: { ticks: { color: '#e8eaf0' } }
+        }
+    }
+});
+
+// Auto refresh every 30 seconds
+setTimeout(() => location.reload(), 30000);
+</script>
+
+</body>
+</html>
