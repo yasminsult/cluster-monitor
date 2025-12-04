@@ -5,6 +5,7 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
 
 env:
   DOCKER_USERNAME: yasminsultana
@@ -36,10 +37,12 @@ jobs:
         tags: |
           ${{ env.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
           ${{ env.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+        cache-from: type=registry,ref=${{ env.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+        cache-to: type=inline
 
   deploy:
     name: Deploy to Kubernetes
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: build-and-push
     if: github.ref == 'refs/heads/main'
     
@@ -47,19 +50,19 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
 
-    - name: Install kubectl
-      uses: azure/setup-kubectl@v3
-
-    - name: Configure kubectl
+    - name: Verify kubectl connection
       run: |
-        mkdir -p $HOME/.kube
-        echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > $HOME/.kube/config
-        chmod 600 $HOME/.kube/config
+        kubectl version --client
+        kubectl get nodes
 
-    - name: Update deployment
+    - name: Apply deployment configuration
+      run: |
+        kubectl apply -f cluster-monitor-deployment.yaml
+
+    - name: Update deployment image
       run: |
         kubectl set image deployment/cluster-monitor \
-          cluster-monitor=${{ env.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest \
+          cluster-monitor=${{ env.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
           -n default
 
     - name: Wait for rollout
@@ -68,6 +71,17 @@ jobs:
 
     - name: Verify deployment
       run: |
+        echo "=== Deployment Status ==="
+        kubectl get deployment cluster-monitor -n default
+        echo ""
+        echo "=== Running Pods ==="
         kubectl get pods -n default -l app=cluster-monitor
+        echo ""
+        echo "=== Service Info ==="
+        kubectl get svc cluster-monitor-service -n default
+        echo ""
+        echo "=== Recent Logs ==="
+        kubectl logs -n default -l app=cluster-monitor --tail=20 || true
+        echo ""
         echo "✅ Deployment successful!"
-
+        echo "Image: ${{ env.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
